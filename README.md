@@ -1,12 +1,36 @@
-# 🧬 Drug Safety Intelligence Dashboard
-### FDA FAERS (2015–2026) · LightGBM AUC 0.7829 · 528,000+ Adverse Event Reports
+# 🧬 Drug Safety Intelligence Platform
+### FDA FAERS (2015–2026) · Multi-Model AI (LightGBM, RF, LR) · 528,000+ Adverse Event Reports
 
 [![Python 3.9+](https://img.shields.io/badge/Python-3.9+-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Streamlit v1.35+](https://img.shields.io/badge/Streamlit-v1.35+-FF4B4B.svg?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![LightGBM v4.3+](https://img.shields.io/badge/Model-LightGBM--v4.3-green.svg?style=for-the-badge&logo=analytics&logoColor=white)](https://lightgbm.readthedocs.io/)
+[![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-v1.4+-orange.svg?style=for-the-badge&logo=scikitlearn&logoColor=white)](https://scikit-learn.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
 A high-performance, clinical-grade pharmacological intelligence platform designed to ingest, analyze, and model drug-related adverse events using the **FDA FAERS (Adverse Event Reporting System)** database. Built on a custom glassmorphic dark design system, the dashboard transforms raw multi-million-row pharmacovigilance reports into actionable statistical and predictive insights.
+
+---
+
+## ⚡ SaaS Onboarding & Application State Manager
+
+The platform behaves like a premium, production-grade SaaS product governed by a robust **Application State Manager** (`st.session_state["app_state"]`). The entire platform is dynamically controlled by dataset upload initialization:
+
+### 🔒 1. Platform Lock State (`APP_LOCKED`)
+- On startup, the dashboard freezes and locks all subpages, visualizers, predictions, and analytical summaries to protect against empty-dataset crashes and raw Python errors.
+- Displays a prominent, centered drag-and-drop file uploader on the home tab, welcoming researchers.
+
+### 🧼 2. Clinical Data Sanitizer & Synonyms Ingestion (`PROCESSING`)
+- **Multi-Format Support**: Supports standard **CSV** (`.csv`) and **Excel** (`.xlsx`, `.xls`) uploads.
+- **Synonyms Mapping**: Automatically parses headers to canonical form (e.g. `died`, `fatal_flag`, `death` ➔ `is_fatal`; `gender`, `patient sex` ➔ `patient_sex`).
+- **Clinical Imputation**: Safely handles null values (median clinical imputations for ages, weights) and performs cohort binning (e.g. `Elderly(81+)`, `Middle-Aged(41-65)`).
+- **Graceful Error Handling**: Catches corrupted spreadsheet formats or empty files cleanly, rendering beautiful warning cards in the UI rather than traceback screens.
+
+### 🚀 3. Auto AI Model Compilation (`DATASET_UPLOADED`)
+- Once the dataset is sanitized, the dashboard **automatically initiates** the training of the three AI models (**LightGBM**, **Random Forest**, and **Logistic Regression**) in the foreground.
+- **Live Console Streaming**: Uses a `StreamToStreamlit` stdout interceptor to stream live Python compilation and estimator training logs directly in the Streamlit Welcome card in real-time!
+
+### ✅ 4. Dynamic Dashboard Unlocking (`READY`)
+- Once training completes, the state transitions to `READY`. All subpages are immediately unlocked and populated dynamically using the newly uploaded, standardized dataset.
 
 ---
 
@@ -15,14 +39,14 @@ A high-performance, clinical-grade pharmacological intelligence platform designe
 The application is structured as a premium **6-page research dashboard** tailored for clinical toxicologists and pharmacovigilance experts:
 
 ### 1. 📊 Data Overview (Trust Layer)
-*   **High-Level KPIs**: Instant reporting counts (528K), population fatality rate (10.3%), hospitalization rate (35.6%), and unique active entities.
+*   **High-Level KPIs**: Instant reporting counts, fatality rates (10.3%), hospitalization rate (35.6%), and unique active entities.
 *   **Interactive Schema**: Clear mapping of all variables, data types, and their exact clinical significance.
-*   **Missing Value Profiler**: Dynamic horizontal bar charts pinpointing data sparsity across key demographic and clinical dimensions.
-*   **Raw Data Explorer**: Interactive data preview table with a customizable slider to adjust row displays.
+*   **Missing Value Profiler**: Dynamic charts pinpointing data sparsity across key demographic and clinical dimensions.
+*   **Raw Data Explorer**: Interactive preview table with customizable displays.
 
 ### 2. 🔍 EDA Dashboard (Exploration Layer)
 *   **📅 Temporal Trends**: Annual and quarterly reporting volumes alongside dynamic yearly fatality rates.
-*   **💊 Drugs & Reactions**: Word clouds and bar graphs mapping the top suspect drugs and reactions, polypharmacy risks, and drug administration routes.
+*   **💊 Drugs & Reactions**: Bar graphs mapping the top suspect drugs and reactions, polypharmacy risks, and administration routes.
 *   **👥 Patient Demographics**: Joint distributions of age vs. fatality rate, biological sex splits, and custom age-binned histograms.
 *   **🌍 Geographic Mapping**: Distribution of adverse events across 162 countries.
 *   **🔬 Custom Explorer**: Interactive analytical tool enabling custom X-Y scatter plots, box plots, and histograms colored by clinical outcomes.
@@ -33,15 +57,17 @@ The application is structured as a premium **6-page research dashboard** tailore
 *   **Dynamic Flagging**: Automated categorization into **🔴 HIGH**, **🟡 MEDIUM**, and **🟢 LOW** risk alerts based on reporting thresholds.
 *   **Granular Signal Lookup**: Instant search box allowing clinical researchers to look up any drug and view its reporting stats in real-time.
 
-### 4. 🤖 Model Prediction (Inference Layer)
-*   **AI Patient Profiler**: Input panel for patient age, weight, biological sex, number of concurrent drugs, primary route, reporting country, and clinical status.
-*   **Real-time Risk Gauge**: High-fidelity Plotly gauge visualizes the predicted probability of a fatal outcome.
-*   **Clinical Alerts**: Interactive warning boxes and population benchmark context cards comparing the patient's individual risk to the baseline FAERS average.
+### 4. 🤖 AI Risk Calculator (Model Switcher & Prediction)
+*   **Interactive Selector**: Switch between LightGBM, Random Forest, or Logistic Regression on the fly to compare risk predictions.
+*   **AI Patient Profiler**: Input panel for age, weight, sex, concurrent drugs, primary route, country, and clinical flags.
+*   **Real-time Risk Gauge**: Plotly gauge visualizes the predicted probability of a fatal outcome using the chosen model's optimal threshold.
+*   **Clinical Alerts**: Interactive warning cards and population benchmark context cards comparing the patient's individual risk to baseline FAERS averages.
 
-### 5. 📈 Model Performance (Evaluation Layer)
-*   **Performance Scorecard**: Live display of ROC-AUC (**0.7829**), Precision, Recall, F1-Score, and overall accuracy.
-*   **Interactive Diagnostics**: High-fidelity Plotly ROC curve, Confusion Matrix, Precision-Recall curve, and Feature Importance chart (highlighting the top predictors like `is_hospitalized` and `patient_age_years`).
-*   **Machine Learning Model Card**: Complete list of training hyperparameters, objective functions, validation parameters, and early stopping callbacks.
+### 5. 📈 Model Performance (Classifier Diagnostics)
+*   **Interactive Switcher**: Choose the active model to inspect metrics scorecards, ROC/PR curves, and confusion matrices dynamically.
+*   **Performance Scorecard**: Live display of AUC-ROC, Precision, Recall, F1-Score, and overall accuracy.
+*   **Feature Importance**: Analyze non-linear gains/impurities for LightGBM and Random Forest dynamically.
+*   **Machine Learning Model Card**: Complete list of training parameters, objective functions, imbalance mitigation strategies, and early stopping thresholds for all models.
 
 ### 6. 💡 Analytical Insights (Decision Layer)
 *   **Interactive Storytelling**: Grounded takeaways summarizing critical clinical trends:
@@ -54,24 +80,25 @@ The application is structured as a premium **6-page research dashboard** tailore
 ## 🏗️ Project Architecture
 
 ```text
-├── app.py                   # Platform Entry Point & Landing Page
+├── app.py                   # Central Router, State Manager & Onboarding Welcome card
+├── export_models.py         # Multi-model AI training pipeline (LightGBM, RF, LR)
 ├── pages/                   # Multi-page dashboard modules
-│   ├── 1_📊_Data_Overview.py    # High-level statistics, schema, and dataset summary
-│   ├── 2_🔍_EDA_Dashboard.py    # Interactive exploratory data analysis (tabs)
-│   ├── 3_🚨_Signal_Detection.py  # Statistical safety signal detection & risk scoring
-│   ├── 4_🤖_Model_Prediction.py  # AI-powered real-time fatality risk prediction form
-│   ├── 5_📈_Model_Performance.py # LightGBM evaluation, confusion matrix, ROC/PR curves
-│   └── 6_💡_Insights.py         # Executive findings, key stories & data-driven takeaways
+│   ├── 1_📊_Data_Overview.py    # Schema & dataset summary (Locked until READY)
+│   ├── 2_🔍_EDA_Dashboard.py    # Exploratory data analysis (Locked until READY)
+│   ├── 3_🚨_Signal_Detection.py  # Statistical signal risk scoring (Locked until READY)
+│   ├── 4_🤖_Model_Prediction.py  # Patient risk calculator (Locked until READY)
+│   ├── 5_📈_Model_Performance.py # ROC/PR switcher diagnostics (Locked until READY)
+│   └── 6_💡_Insights.py         # Executive storytelling summaries (Locked until READY)
 ├── utils/                   # Backend logic & helper utilities
 │   ├── __init__.py          # Package initialization
-│   ├── charts.py            # Custom Plotly chart templates & layout engines
-│   ├── data_loader.py       # Optimized FAERS data ingestion with caching
-│   ├── model.py             # LightGBM inference & scoring pipeline
-│   └── preprocessing.py     # Feature encoding & mapping logic
+│   ├── charts.py            # Reusable Plotly chart templates & layout engines
+│   ├── data_loader.py       # Optimized data ingestion, common sidebar & state indicators
+│   ├── model.py             # Multi-model dynamic loading & inference pipeline
+│   └── preprocessing.py     # Synonym mapping, clinical type coercion & label encodings
 ├── assets/                  # Styling and static assets
 │   └── styles.css           # Premium glassmorphic dark theme stylesheet
-├── data/                    # Processed FAERS datasets (Git-ignored)
-├── models/                  # Trained LightGBM artifacts & encoders (Git-ignored)
+├── data/                    # Ingested datasets (Git-ignored)
+├── models/                  # Trained classifier pickles & thresholds (Git-ignored)
 └── requirements.txt         # Project dependencies
 ```
 
@@ -103,43 +130,11 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Download and Place the Dataset
-Place the cleaned FDA FAERS dataset `fda_adverse_events_2015_2026_CLEAN.csv` in one of the following directory paths (the data loader will automatically resolve the path):
-- `data/fda_adverse_events_2015_2026_CLEAN.csv`
-- `./fda_adverse_events_2015_2026_CLEAN.csv`
-
-### 5. Train & Export the LightGBM Model
-To train the LightGBM classifier and export all serialization artifacts required for the predictions page:
-```bash
-python export_models.py
-```
-This script will:
-- Ingest and sample the cleaned FAERS dataset (preserves target ratio via stratified split).
-- Fit an optimal LightGBM model.
-- Tune the probability threshold via F1 maximization.
-- Export all artifacts (`lgbm_model.pkl`, `label_encoders.pkl`, `optimal_threshold.pkl`, `feature_importance.parquet`, etc.) to the `models/` directory.
-
-### 6. Run the Dashboard
+### 4. Run the Dashboard
 ```bash
 streamlit run app.py
 ```
-The console will output the local network URL (typically `http://localhost:8501`). Open your browser to explore the dashboard.
-
----
-
-## 🧠 Machine Learning Model Card
-
-The AI predictive engine uses a gradient-boosted decision tree architecture to assess fatality risk:
-
-| Hyperparameter | Value / Setting | Description |
-|---|---|---|
-| **Algorithm** | LightGBM Binary Classifier | High-efficiency gradient boosting |
-| **Target Variable** | `is_fatal` | Boolean target mapping to patient fatality |
-| **Features Ingested** | 12 | Demographics (`patient_age_years`, `patient_weight_kg`, `patient_sex`, `age_group`, `country`), Clinical Flags (`is_hospitalized`, `is_life_threat`, `is_disabling`), and Polypharmacy (`num_drugs`, `num_reactions`, `drug_count_category`, `drug_route`) |
-| **Imbalance Strategy** | `is_unbalance=True` | Internal boosting adjustment for class imbalance |
-| **Early Stopping** | 80 rounds | Safeguards against overfitting on training data |
-| **Threshold Strategy** | F1 maximization | Optimal probability decision boundary is selected dynamically |
-| **Primary Metric** | **AUC-ROC (0.7829)** | High classification discriminative capacity |
+*The entry point script automatically checks the local disk container. If a dataset is missing, it will initialize the onboarding welcome uploader screen. Simply drag and drop your clinical file (CSV/XLSX) to compile and activate the entire platform automatically!*
 
 ---
 
