@@ -5,6 +5,10 @@ User Tool: Real-time fatality risk prediction.
 import streamlit as st
 from utils.model import predict_risk, load_model
 from utils.charts import plot_risk_gauge
+from utils.data_loader import render_common_sidebar
+
+# ── Render unified sidebar and check model status ──────────────────────────
+status = render_common_sidebar()
 
 st.markdown(
     '<div class="section-header">🤖 Fatality Risk Prediction — LightGBM</div>',
@@ -17,15 +21,44 @@ st.markdown("""
 """)
 
 # ── Check model availability ──────────────────────────────────────────────
+if not status["model_active"]:
+    st.warning("""
+    🔌 **AI Risk Predictor Platform Offline**
+    
+    The predictive AI models are currently offline or not yet compiled.
+    
+    **How to activate:**
+    1. Navigate to the **Home tab**.
+    2. Upload the adverse events dataset.
+    3. The platform will automatically fit and serialize all three models (LightGBM, Random Forest, Logistic Regression) in ~30 seconds and unlock this prediction calculator page.
+    """)
+    st.stop()
+
+model_name = st.selectbox(
+    "🔮 Selected Predictive AI Model",
+    ["LightGBM", "Random Forest", "Logistic Regression"],
+    help="Switch between the different trained AI classifiers to compare predicted risk probabilities."
+)
+
 try:
-    _, le_dict, threshold = load_model()
+    from utils.model import load_selected_model
+    _, le_dict, threshold = load_selected_model(model_name)
     model_available = True
 except FileNotFoundError:
     model_available = False
-    st.error("""
-    ⚠️ Model artifacts not found. Please run `export_models.py` from your
-    notebook environment first to generate the required files in `models/`.
+    st.warning(f"""
+    🔌 **{model_name} Model Offline**
+    
+    The `{model_name}` classifier files are currently missing.
+    
+    **How to activate:**
+    1. Click the **⚡ Train Predictive AI Model** button in the sidebar.
+    2. The system will compile all three models (LightGBM, Random Forest, and Logistic Regression) at once in ~30 seconds and unlock this page.
     """)
+    st.stop()
+except Exception as e:
+    model_available = False
+    st.error(f"Error loading model {model_name}: {e}")
 
 if model_available:
     # Build dropdown choices from the trained encoders so they always match
@@ -94,7 +127,7 @@ if model_available:
         }
 
         with st.spinner("Running prediction..."):
-            result = predict_risk(input_dict)
+            result = predict_risk(input_dict, model_name=model_name)
 
         st.divider()
         st.markdown("#### 📊 Prediction Result")

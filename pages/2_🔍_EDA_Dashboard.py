@@ -5,13 +5,23 @@ Exploration Layer: Interactive, alive, dynamic.
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from utils.data_loader import load_data
+from utils.data_loader import load_data, render_common_sidebar
 from utils.charts import (
     plot_annual_trend, plot_quarterly_trend, plot_top_drugs,
     plot_top_reactions, plot_age_fatality, plot_sex_distribution,
     plot_outcome_rates, plot_polypharmacy_fatal, plot_country_top,
     plot_route_distribution,
 )
+
+# ── Render unified sidebar and check dataset status ──────────────────────────
+status = render_common_sidebar()
+if not status["dataset_active"]:
+    st.markdown(
+        '<div class="section-header">🔍 Exploratory Data Analysis Dashboard</div>',
+        unsafe_allow_html=True,
+    )
+    st.warning("⚠️ **Dataset Offline**\nPlease upload the adverse events dataset on the Home tab to activate this page's analysis.")
+    st.stop()
 
 st.markdown(
     '<div class="section-header">🔍 Exploratory Data Analysis Dashboard</div>',

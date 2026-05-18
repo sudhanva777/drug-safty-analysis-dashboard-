@@ -5,7 +5,17 @@ Core Brain: Drug × Event risk scoring.
 import streamlit as st
 import pandas as pd
 import numpy as np
-from utils.data_loader import load_data
+from utils.data_loader import load_data, render_common_sidebar
+
+# ── Render unified sidebar and check dataset status ──────────────────────────
+status = render_common_sidebar()
+if not status["dataset_active"]:
+    st.markdown(
+        '<div class="section-header">🚨 Drug Safety Signal Detection</div>',
+        unsafe_allow_html=True,
+    )
+    st.warning("⚠️ **Dataset Offline**\nPlease upload the adverse events dataset on the Home tab to activate this page's analysis.")
+    st.stop()
 
 st.markdown(
     '<div class="section-header">🚨 Drug Safety Signal Detection</div>',

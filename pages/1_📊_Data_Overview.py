@@ -4,7 +4,17 @@ Trust Layer: Understand the dataset at a glance.
 """
 import streamlit as st
 import pandas as pd
-from utils.data_loader import load_data, HARDCODED_KPIS
+from utils.data_loader import load_data, HARDCODED_KPIS, render_common_sidebar
+
+# ── Render unified sidebar and check dataset status ──────────────────────────
+status = render_common_sidebar()
+if not status["dataset_active"]:
+    st.markdown(
+        '<div class="section-header">📊 Dataset Overview — FDA FAERS 2015–2026</div>',
+        unsafe_allow_html=True,
+    )
+    st.warning("⚠️ **Dataset Offline**\nPlease upload the adverse events dataset on the Home tab to activate this page's analysis.")
+    st.stop()
 
 st.markdown(
     '<div class="section-header">📊 Dataset Overview — FDA FAERS 2015–2026</div>',

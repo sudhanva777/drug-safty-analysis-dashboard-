@@ -1,20 +1,22 @@
 """
 export_models.py — Standalone model training & artifact export
 ==============================================================
-Trains a LightGBM binary classifier to predict `is_fatal` from the
-FDA FAERS 2015-2026 dataset, then exports all artifacts required by
-the Streamlit dashboard.
+Trains LightGBM, Random Forest, and Logistic Regression classifiers to predict `is_fatal` 
+from the FDA FAERS dataset, then exports all artifacts required by the Streamlit dashboard.
 
 Run from the drug-safety-dashboard/ directory:
-    py export_models.py
+    python export_models.py
 
 Produces (in models/):
     lgbm_model.pkl          – trained LightGBM booster
+    rf_model.pkl            – trained Random Forest classifier
+    lr_model.pkl            – trained Logistic Regression classifier
     label_encoders.pkl      – dict of sklearn LabelEncoders
-    optimal_threshold.pkl   – F1-tuned probability threshold
+    optimal_threshold.pkl   – F1-tuned probability threshold (LightGBM)
+    optimal_thresholds.pkl  – dict of F1-tuned thresholds for all models
     feature_list.pkl        – ordered feature name list
-    test_results.parquet    – test-set predictions for perf page
-    feature_importance.parquet – feature importance table
+    test_results.parquet    – test-set predictions with probabilities for all models
+    feature_importance.parquet – feature importance table containing LGBM & RF metrics
 """
 
 import os
@@ -34,6 +36,8 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
 
 warnings.filterwarnings("ignore")
 
@@ -68,7 +72,7 @@ CAT_COLS = [
 BOOL_COLS = ["is_hospitalized", "is_life_threat", "is_disabling"]
 TARGET    = "is_fatal"
 
-# Sampling budget — keeps memory under ~1 GB and trains in < 60 s
+# Sampling budget — keeps memory under ~1 GB and trains all 3 models in < 45 s
 SAMPLE_N  = 150_000
 
 
@@ -177,14 +181,17 @@ def _find_optimal_threshold(y_true, y_proba):
     # F1 = 2 * P * R / (P + R)
     f1 = np.where((prec + rec) == 0, 0, 2 * prec * rec / (prec + rec))
     best_idx = np.argmax(f1)
-    return float(thresholds[best_idx])
+    # Safe boundary check
+    if best_idx < len(thresholds):
+        return float(thresholds[best_idx])
+    return 0.5
 
 
 # ── Main pipeline ──────────────────────────────────────────────────────────
 def main():
     t0 = time.time()
     print("=" * 60)
-    print("  Drug Safety Model — Training & Export Pipeline")
+    print("  Drug Safety Multi-Model — Training & Export Pipeline")
     print("=" * 60)
 
     # 1. Locate data
@@ -206,48 +213,74 @@ def main():
     print(f"  Train: {len(X_train):,}  |  Test: {len(X_test):,}")
     print(f"  Fatal rate – train: {y_train.mean()*100:.1f}%  test: {y_test.mean()*100:.1f}%")
 
-    # 5. Train model
+    # 5. Train LightGBM Model
     print("[4/6] Training LightGBM …")
-    model = _train_lgbm(X_train, y_train, X_test, y_test)
+    lgb_model = _train_lgbm(X_train, y_train, X_test, y_test)
+    lgb_proba = lgb_model.predict(X_test)
+    lgb_auc = roc_auc_score(y_test, lgb_proba)
+    lgb_thresh = _find_optimal_threshold(y_test.values, lgb_proba)
 
-    # 6. Evaluate
-    print("[5/6] Evaluating …")
-    y_pred_proba = model.predict(X_test)
-    auc = roc_auc_score(y_test, y_pred_proba)
-    best_thresh = _find_optimal_threshold(y_test.values, y_pred_proba)
-    y_pred = (y_pred_proba >= best_thresh).astype(int)
-    print(f"  AUC-ROC:           {auc:.4f}")
-    print(f"  Optimal threshold: {best_thresh:.4f}")
-    print(classification_report(y_test, y_pred, target_names=["Not Fatal", "Fatal"]))
+    # 6. Train Random Forest Model
+    print("      Training Random Forest Classifier …")
+    rf_model = RandomForestClassifier(n_estimators=100, max_depth=8, class_weight="balanced", random_state=42, n_jobs=-1)
+    rf_model.fit(X_train, y_train)
+    rf_proba = rf_model.predict_proba(X_test)[:, 1]
+    rf_auc = roc_auc_score(y_test, rf_proba)
+    rf_thresh = _find_optimal_threshold(y_test.values, rf_proba)
 
-    # 7. Export artifacts
-    print("[6/6] Exporting artifacts …")
+    # 7. Train Logistic Regression Model
+    print("      Training Logistic Regression Classifier …")
+    lr_model = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=42)
+    lr_model.fit(X_train, y_train)
+    lr_proba = lr_model.predict_proba(X_test)[:, 1]
+    lr_auc = roc_auc_score(y_test, lr_proba)
+    lr_thresh = _find_optimal_threshold(y_test.values, lr_proba)
+
+    print("\n[5/6] Model Evaluations on Test Set:")
+    print(f"  • LightGBM:             AUC-ROC = {lgb_auc:.4f} | Optimal Threshold = {lgb_thresh:.4f}")
+    print(f"  • Random Forest:        AUC-ROC = {rf_auc:.4f} | Optimal Threshold = {rf_thresh:.4f}")
+    print(f"  • Logistic Regression:  AUC-ROC = {lr_auc:.4f} | Optimal Threshold = {lr_thresh:.4f}")
+
+    # 8. Export artifacts
+    print("\n[6/6] Exporting artifacts …")
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
-    joblib.dump(model,       MODEL_DIR / "lgbm_model.pkl")
+    # Serializations
+    joblib.dump(lgb_model,   MODEL_DIR / "lgbm_model.pkl")
+    joblib.dump(rf_model,    MODEL_DIR / "rf_model.pkl")
+    joblib.dump(lr_model,    MODEL_DIR / "lr_model.pkl")
     joblib.dump(le_dict,     MODEL_DIR / "label_encoders.pkl")
-    joblib.dump(best_thresh, MODEL_DIR / "optimal_threshold.pkl")
+    joblib.dump(lgb_thresh,  MODEL_DIR / "optimal_threshold.pkl")
+    
+    # Combined threshold directory
+    thresholds = {
+        "LightGBM": lgb_thresh,
+        "Random Forest": rf_thresh,
+        "Logistic Regression": lr_thresh
+    }
+    joblib.dump(thresholds,  MODEL_DIR / "optimal_thresholds.pkl")
     joblib.dump(FEATURES,    MODEL_DIR / "feature_list.pkl")
 
-    # Test results for the performance page
+    # Save test results containing all predictions
     test_results = X_test.copy()
     test_results["y_true"] = y_test.values
-    test_results["y_pred_proba"] = y_pred_proba
+    test_results["y_pred_proba"] = lgb_proba # default for legacy compat
+    test_results["y_pred_proba_lgbm"] = lgb_proba
+    test_results["y_pred_proba_rf"] = rf_proba
+    test_results["y_pred_proba_lr"] = lr_proba
     test_results.to_parquet(MODEL_DIR / "test_results.parquet", index=False)
 
-    # Feature importance
+    # Save feature importances
     feat_imp = pd.DataFrame({
         "feature": FEATURES,
-        "importance": model.feature_importance(importance_type="gain"),
-    }).sort_values("importance", ascending=False)
+        "importance_lgbm": lgb_model.feature_importance(importance_type="gain"),
+        "importance_rf": rf_model.feature_importances_,
+    }).sort_values("importance_lgbm", ascending=False)
     feat_imp.to_parquet(MODEL_DIR / "feature_importance.parquet", index=False)
 
     elapsed = time.time() - t0
     print("=" * 60)
-    print(f"  [OK] All artifacts saved to {MODEL_DIR}")
-    print(f"     Model AUC:  {auc:.4f}")
-    print(f"     Threshold:  {best_thresh:.4f}")
-    print(f"     Encoders:   {len(le_dict)} ({', '.join(le_dict)})")
+    print(f"  [OK] All model artifacts saved to {MODEL_DIR}")
     print(f"     Elapsed:    {elapsed:.1f}s")
     print("=" * 60)
 
